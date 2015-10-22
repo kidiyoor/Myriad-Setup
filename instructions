@@ -82,7 +82,7 @@ first time build will take long time
 As you know myriad works as a plugin for resourcemanager of yarn
 we need to copy the executables(generated from previous command) to respective locations inside hadoop
   
-  sudo cp myriad-scheduler/build/libs/* $YARN_HOME/share/hadoop/yarn/lib/
+  sudo cp myriad-scheduler/build/libs/* /usr/local/share/hadoop/yarn/lib/
   sudo cp myriad-executor/build/libs/myriad-executor-runnable-0.0.1.jar /usr/local/libexec/mesos
   sudo cp myriad-scheduler/src/main/resources/myriad-config-default.yml /usr/local/hadoop/etc/hadoop/
   
