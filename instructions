@@ -1,0 +1,202 @@
+# Myriad-Setup
+Setting up Myriad on ubuntu
+
+(source : http://mesos.apache.org/gettingstarted)
+(Source : https://cwiki.apache.org/confluence/display/MYRIAD/Installation+and+Configuration)
+(Source : https://github.com/mesos/myriad)
+
+  sudo apt-get update
+  git clone https://github.com/mesos/myriad.git
+  cd myriad
+
+create a user hduser
+  ./setup-yarn-1.sh
+
+//Install hadoop
+  ./setup-yarn-2.sh
+
+you might get error related to java path
+(fix : set java path in hadoop-env.sh in this /usr/local/hadoop/etc/hadoop
+and comment the respective line in setup-yarn-2.sh)
+
+  su hduser
+  source ~/.bashrc (of hduser)
+
+check if hadoop is installed properly 
+
+  start-all.sh
+  hadoop jar /usr/local/hadoop/share/hadoop/mapreduce/hadoop-mapreduce-examples-2.5.2.jar pi 2 5
+  stop-all.sh
+
+Install mesos(Ubuntu 14.04)
+
+make sure you have gcc and g++ version 4.8 or above
+
+  //change user
+  su hduser
+  wget http://www.apache.org/dist/mesos/0.25.0/mesos-0.25.0.tar.gz
+  tar -zxf mesos-0.25.0.tar.gz
+  
+  //mesos dependencies
+  sudo apt-get -y install build-essential python-dev python-boto libcurl4-nss-dev libsasl2-dev maven libapr1-dev libsvn-dev
+  cd mesos-0.25.0
+  mkdir build
+  cd build
+  ../configure
+  make
+
+  //Run test suite.
+  make check
+
+  //MASTERIP can be 127.0.0.1 or preferably your network ip so that mesos salves on other server can connect
+  //start master
+  ./bin/mesos-master.sh --ip=MASTERIP --work_dir=/var/lib/mesos
+  //start slave
+  ./bin/mesos-slave.sh --master=MASTERIP:5050
+
+MESOS UI :http://MASTERIP:5050
+
+
+Installing myriad
+
+  cd myriad
+
+before build
+change the config file myriad-config-default.yml
+
+  cd myriad-scheduler/src/main/resources
+
+change the mesosMaster Parameter 
+mesosMaster: MASTERIP:5050
+
+  cd ../../../..
+//you are in the project directory
+
+build myriad
+  ./gradlew build
+
+first time build will take long time
+
+//The following need to be done in all the nodes of the cluster(in our case only one node)
+
+As you know myriad works as a plugin for resourcemanager of yarn
+we need to copy the executables(generated from previous command) to respective locations inside hadoop
+  
+  sudo cp myriad-scheduler/build/libs/* $YARN_HOME/share/hadoop/yarn/lib/
+  sudo cp myriad-executor/build/libs/myriad-executor-runnable-0.0.1.jar /usr/local/libexec/mesos
+  sudo cp myriad-scheduler/src/main/resources/myriad-config-default.yml /usr/local/etc/hadoop/
+  
+  sudo mkdir -p /usr/local/libexec/mesos/
+  sudo cp myriad-executor/build/libs/myriad-executor-0.0.1.jar /usr/local/hadoop/share/hadoop/yarn/lib/
+  //myriad executor jar
+  sudo chown hduser:hadoop -R /usr/local/libexec/mesos/
+
+The following YARN properties must be modified on each node in the cluster:
+
+//hadoop-env.sh
+  sudo nano $YARN_HOME/etc/hadoop/hadoop-env.sh
+add the following line
+export MESOS_NATIVE_JAVA_LIBRARY=/usr/local/lib/libmesos.so
+
+
+//yarn-site.xml
+  sudo nano $YARN_HOME/etc/hadoop/yarn-site.xml
+add the following content
+
+<property>
+    <name>yarn.nodemanager.resource.cpu-vcores</name>
+    <value>${nodemanager.resource.cpu-vcores}</value>
+</property>
+<property>
+    <name>yarn.nodemanager.resource.memory-mb</name>
+    <value>${nodemanager.resource.memory-mb}</value>
+</property>
+<!--These options enable dynamic port assignment by mesos -->
+<property>
+    <name>yarn.nodemanager.address</name>
+    <value>${myriad.yarn.nodemanager.address}</value>
+</property>
+<property>
+    <name>yarn.nodemanager.webapp.address</name>
+    <value>${myriad.yarn.nodemanager.webapp.address}</value>
+</property>
+<property>
+    <name>yarn.nodemanager.webapp.https.address</name>
+    <value>${myriad.yarn.nodemanager.webapp.address}</value>
+</property>
+<property>
+    <name>yarn.nodemanager.localizer.address</name>
+    <value>${myriad.yarn.nodemanager.localizer.address}</value>
+</property>
+<!-- Configure Myriad Scheduler here -->
+<property>
+    <name>yarn.resourcemanager.scheduler.class</name>
+    <value>com.ebay.myriad.scheduler.yarn.MyriadFairScheduler</value>
+    <description>One can configure other scehdulers as well from following list: com.ebay.myriad.scheduler.yarn.MyriadCapacityScheduler, com.ebay.myriad.scheduler.yarn.MyriadFifoScheduler</description>
+</property>
+
+
+
+And edit or add following property 
+<property>
+<name>yarn.nodemanager.aux-services</name>
+<value>mapreduce_shuffle,myriad_executor</value>
+</property>
+<property>
+        <name>yarn.nodemanager.aux-services.myriad_executor.class</name>
+        <value>com.ebay.myriad.executor.MyriadExecutorAuxService</value>
+</property>
+
+
+//mapred-site.xml
+  sudo cp $YARN_HOME/etc/hadoop/mapred-site.xml.template mapred-site.xml
+add the following 
+
+<!--This option enables dynamic port assignment by mesos -->
+<property>
+    <name>mapreduce.shuffle.port</name>
+    <value>${myriad.mapreduce.shuffle.port}</value>
+</property>
+
+  cd $YARN_HOME
+  //start Resource Manager(Myriad Scheduler runs inside the Resource Manager as a plug-in)
+  ./sbin/yarn-daemon.sh start resourcemanager 
+
+
+try playing with flex up and flex down 
+
+Commands to start hadoop-myriad
+  /usr/local/hadoop/sbin/hadoop-daemon.sh start namenode
+  /usr/local/hadoop/sbin/hadoop-daemon.sh start datanode
+  /usr/local/hadoop/sbin/mr-jobhistory-daemon.sh start historyserver
+  //NOTE: start Resource Manager(Myriad Scheduler runs inside the Resource Manager as a plug-in)
+  /usr/local/hadoop/sbin/yarn-daemon.sh start resourcemanager 
+
+Myriad UI : http://MASTERIP:8192
+
+Commands to start mesos
+  ./bin/mesos-master.sh --ip=MASTERIP --work_dir=/var/lib/mesos
+  ./bin/mesos-slave.sh --master=MASTERIP:5050
+
+Mesos UI :http://MASTERIP:5050
+
+
+
+NOTE :
+Few error that I encountered
+
+while Flex up the task might get stuck in pending stage
+
+This can be due to following reason
+1) Read the log of resourcemanager (Browse at http://localhost:50070/), every time the resourcemanager might reject the resource offer from mesos master due to insufficient CPU and memory offers. (fix : increase the capacity of mesos sla
+
+2) Read the logs of mesos master and mesos slave (/var/log/mesos), If there is any IP configuration issue, mesos slave might not be able to recognize acknowledgement from master. (fix: Check the myriad-config-default.yml file and restart the slave, pointing to correct IP of master ie: MASTERIP in our case)
+
+while Flex up the task might get stuck in pending stage
+
+3) I had installed hadoop and mesos on different user and faced issues like bellow
+link:http://qnalist.com/questions/1998386/mesos-slave-permissions-problem-w-multiple-users
+As a quick fix : installed hadoop on the same user as mesos and set --switch_user flag of mesos to false while starting the slave
+There must be a better way
+
+
