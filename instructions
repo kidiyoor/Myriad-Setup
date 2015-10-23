@@ -170,6 +170,7 @@ Commands to start hadoop-myriad
 Myriad UI : http://MASTERIP:8192
 
 Commands to start mesos
+  cd ~/mesos-0.25.0/build/bin
   ./bin/mesos-master.sh --ip=MASTERIP --work_dir=/var/lib/mesos
   ./bin/mesos-slave.sh --master=MASTERIP:5050
 
@@ -185,7 +186,11 @@ while Flex up the task might get stuck in pending stage
 This can be due to following reason
 1) Read the log of resourcemanager (Browse at http://localhost:50070/), every time the resourcemanager might reject the resource offer from mesos master due to insufficient CPU and memory offers. (fix : increase the capacity of mesos sla
 
-2) Read the logs of mesos master and mesos slave (/var/log/mesos), If there is any IP configuration issue, mesos slave might not be able to recognize acknowledgement from master. (fix: Check the myriad-config-default.yml file and restart the slave, pointing to correct IP of master ie: MASTERIP in our case)
+2) Read the logs of mesos master and mesos slave (/var/log/mesos), If there is any IP configuration issue, mesos slave might not be able to recognize registration message from master.
+Ignoring registration message from master@127.0.1.1:5050 because it is not the expected master: master@10.10.3.168:5050
+E1022 17:37:06.616950 18146 socket.hpp:174] Shutdown failed on fd=7: Transport endpoint is not connected [107]
+
+ (fix: Check the myriad-config-default.yml file and restart the slave, pointing to correct IP of master ie: MASTERIP in our case)
 
 while Flex up the task might get stuck in pending stage
 
